@@ -448,3 +448,91 @@ async def nyt(interaction: discord.Interaction):
 
     __nyt = bottle.games.NYTWordle(interaction, __room)
     await __nyt.run()
+
+
+@client.tree.command(
+    name="feudle",
+    description="Starts a Feudle game",
+    guilds=guild_masters
+)
+async def feudle(interaction: discord.Interaction):
+    await requires_admin_perms(interaction)
+
+    user = interaction.user
+    guild = interaction.guild
+    channel = interaction.channel
+
+    if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+        await interaction.response.send_message(  # noqa
+            f"Sorry, I cannot execute `/{interaction.command.name}` here",
+            ephemeral=True,
+            delete_after=30
+        )
+
+    embed = discord.Embed(
+        title="Create NYT Wordle Game Request",
+        color=discord.Color.greyple()
+    )
+    embed.add_field(
+        name="",
+        value="... searching for your room",
+        inline=False
+    )
+    await interaction.response.send_message(  # noqa
+        embed=embed,
+        ephemeral=True
+    )
+
+    try:
+        __room = await player.search_room(user, guild)
+    except discord.Forbidden as e:
+        logger.info(
+            f"Client does not have permission to search rooms in {guild}",
+            exc_info=e
+        )
+        embed.add_field(
+            name="",
+            value="I don't have permission",
+            inline=False
+        )
+        embed.colour = discord.Color.brand_red()
+        message = await interaction.edit_original_response(embed=embed)
+        await message.delete(delay=15)
+        return
+
+    if not __room:
+        embed.add_field(
+            name="",
+            value="... creating your room",
+            inline=False
+        )
+
+        try:
+            __room = await player.create_room(user, channel)
+        except discord.Forbidden as e:
+            logger.info(
+                "Client does not have permission to create threads in"
+                f" {guild}",
+                exc_info=e
+            )
+            embed.add_field(
+                name="",
+                value="I don't have permission",
+                inline=False
+            )
+            embed.colour = discord.Color.brand_red()
+            message = await interaction.edit_original_response(embed=embed)
+            await message.delete(delay=15)
+            return
+
+    embed.add_field(
+        name="",
+        value=f"Play your game here [{__room.mention}]",
+        inline=False
+    )
+    embed.colour = discord.Color.brand_green()
+    message = await interaction.edit_original_response(embed=embed)
+    await message.delete(delay=15)
+
+    __feudle = bottle.games.Feudle(interaction, __room)
+    await __feudle.run()
