@@ -260,3 +260,102 @@ async def room(interaction: discord.Interaction):
     embed.colour = discord.Color.brand_green()
     message = await interaction.edit_original_response(embed=embed)
     await message.delete(delay=15)
+
+
+@client.tree.command(
+    name="delroom",
+    description="Deletes the player's room",
+    guilds=guild_masters
+)
+async def delroom(interaction: discord.Interaction):
+    await requires_admin_perms(interaction)
+
+    user = interaction.user
+    guild = interaction.guild
+    channel = interaction.channel
+
+    if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+        await interaction.response.send_message(  # noqa
+            f"Sorry, I cannot execute `/{interaction.command.name}` here",
+            ephemeral=True,
+            delete_after=30
+        )
+
+    embed = discord.Embed(
+        title="Get Room Request",
+        color=discord.Color.greyple()
+    )
+    embed.add_field(
+        name="",
+        value="... searching for your room",
+        inline=False
+    )
+    await interaction.response.send_message(  # noqa
+        embed=embed,
+        ephemeral=True
+    )
+
+    try:
+        __room = await player.search_room(user, guild)
+    except discord.Forbidden as e:
+        logger.info(
+            f"Client does not have permission to search rooms in {guild}",
+            exc_info=e
+        )
+        embed.add_field(
+            name="",
+            value="I don't have permission",
+            inline=False
+        )
+        embed.colour = discord.Color.brand_red()
+        message = await interaction.edit_original_response(embed=embed)
+        await message.delete(delay=15)
+        return
+
+    if not __room:
+        embed.add_field(
+            name="",
+            value="Cannot find your room",
+            inline=False
+        )
+        embed.colour = discord.Color.brand_red()
+        message = await interaction.edit_original_response(embed=embed)
+        await message.delete(delay=15)
+        return
+
+    embed.add_field(
+        name="",
+        value="... deleting your room",
+        inline=False
+    )
+    await interaction.edit_original_response(embed=embed)
+
+    try:
+        await player.delete_room(
+            user,
+            room=__room,
+            reason=f"{user.name} requested for deletion"
+        )
+        embed.add_field(
+            name="",
+            value="Successfully deleted your room",
+            inline=False
+        )
+        embed.colour = discord.Color.brand_green()
+        message = await interaction.edit_original_response(embed=embed)
+        await message.delete(delay=15)
+    except discord.Forbidden as e:
+        logger.info(
+            f"Client does not have permission to delete threads in {guild}",
+            exc_info=e
+        )
+        embed.add_field(
+            name="",
+            value="I don't have permission",
+            inline=False
+        )
+        embed.colour = discord.Color.brand_green()
+        message = await interaction.edit_original_response(embed=embed)
+        await message.delete(delay=15)
+    except discord.errors.NotFound:
+        pass

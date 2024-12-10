@@ -3,7 +3,7 @@ This module caches player data.
 """
 
 
-__all__ = ["get_room", "search_room", "create_room"]
+__all__ = ["get_room", "search_room", "create_room", "delete_room"]
 __version__ = "1.0.0"
 __author__ = "Eggie"
 
@@ -141,3 +141,32 @@ async def create_room(user: Player,
     __rooms[user.id] = room
     return room
 
+
+async def delete_room(user: Player,
+                      *,
+                      guild: Optional[discord.Guild] = None,
+                      room: Optional[discord.Thread] = None,
+                      reason: Optional[str] = None) -> None:
+    """
+    Deletes the user's room.
+
+    If a room is not provided, the function will search for the user's room in
+    the provided guild.
+
+    :param user: The Discord user.
+    :param guild: The guild where their room resides. Defaults to None.
+    :param room: The room to remove. Defaults to None
+    :param reason: The reason for deleting the user's room.
+    """
+    if guild and room:
+        raise TypeError("too many arguments")
+
+    if not room:
+        if not guild:
+            raise ValueError("missing guild argument")
+        room = await search_room(user, guild)
+
+    if room:
+        await room.delete(reason=reason)
+        if user.id in __rooms:
+            del __rooms[user.id]
