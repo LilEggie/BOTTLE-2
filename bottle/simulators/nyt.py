@@ -15,13 +15,19 @@ color-coded hints the game provides.
 ==========   ===================================================
 """
 
-__all__ = ["Script", "Lexicon", "InvalidGuessError", "NYTWordleSimulator"]
+__all__ = [
+    "Script", "Lexicon", "lexicon", "word_list", "InvalidGuessError",
+    "NYTWordleSimulator"
+]
 __version__ = "1.0.0"
 __author__ = "Eggie"
 
 
-from typing import Iterable, Iterator
+import random
+from typing import Any, Iterable, Iterator, Optional
 
+import bottle.dir
+import bottle.simulators.utils as utils
 from bottle.simulators.wordle import TileString, WordleError, WordleSimulator
 
 
@@ -29,8 +35,17 @@ class Script:
     """
     Defines the character sets for different scripts supported by the
     :class:`NYTWordleSimulator`.
+
+    :cvar ENGLISH_LOWERCASE: A set containing all lowercase English alphabetic
+        characters.
+    :cvar ENGLISH_UPPERCASE: A set containing all uppercase English alphabetic
+        characters.
+    :cvar ENGLISH: A combined set of both lowercase and uppercase English
+        alphabetic characters.
     """
-    pass
+    ENGLISH_LOWERCASE = set("abcdefghijklmnopqrstuvwxyz")
+    ENGLISH_UPPERCASE = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    ENGLISH = ENGLISH_LOWERCASE | ENGLISH_UPPERCASE
 
 
 class _TrieNode:
@@ -299,6 +314,17 @@ class Lexicon:
             )
 
 
+__filepath = bottle.dir.resources / "wordle" / "nyt"
+
+lexicon = Lexicon()
+"""The lexicon all NYT Wordle games use."""
+for __word in utils.extract_words(__filepath / "lexicon.txt"):
+    lexicon.add(__word)
+
+word_list = list(utils.extract_words(__filepath / "word_list.txt"))
+"""The word list NYT Wordle uses for generating random words."""
+
+
 class InvalidGuessError(WordleError):
     """An invalid guess was played."""
     pass
@@ -323,7 +349,13 @@ class NYTWordleSimulator(WordleSimulator):
             guess the secret word. If this is a negative number, then the
             player will have an unlimited number of attempts. Defaults to -1.
         """
-        raise NotImplementedError
+        secret_word = secret_word or random.choice(word_list)
+        super().__init__(secret_word, max_attempts)
+
+        self._script: Optional[set[str]] = None
+        self._lexicon: Optional[Lexicon] = None
+
+        self._guess_history: list[TileString] = []
 
     def add_script(self, char_collection: Iterable[str]) -> None:
         """
@@ -341,7 +373,15 @@ class NYTWordleSimulator(WordleSimulator):
 
         :raise WordleError: Called during the middle of a game.
         """
-        raise NotImplementedError
+        if self._attempts_used > 0 and self.has_attempts_left():
+            raise WordleError(
+                "changing the script contents in the middle of a game"
+            )
+        if self._script is None:
+            self._script = set()
+        for s in char_collection:
+            if len(s) == 1:
+                self._script.add(s)
 
     def remove_script(self, char_collection: Iterable[str]) -> None:
         """
@@ -356,7 +396,13 @@ class NYTWordleSimulator(WordleSimulator):
         :raise WordleError: Called during the middle of a game.
         :raise RuntimeError: :meth:`add_script` was never called.
         """
-        raise NotImplementedError
+        if self._attempts_used > 0 and self.has_attempts_left():
+            raise WordleError(
+                "changing the script contents in the middle of a game"
+            )
+        if self._script is None:
+            raise RuntimeError("removing from a script that does not exist")
+        self._script.difference_update(char_collection)
 
     def clear_script(self) -> None:
         """
@@ -367,7 +413,13 @@ class NYTWordleSimulator(WordleSimulator):
         :raise WordleError: Called during the middle of a game.
         :raise RuntimeError: :meth:`add_script` was never called.
         """
-        raise NotImplementedError
+        if self._attempts_used > 0 and self.has_attempts_left():
+            raise WordleError(
+                "changing the script contents in the middle of a game"
+            )
+        if self._script is None:
+            raise RuntimeError("clearing a script that does not exist")
+        self._script.clear()
 
     def add_lexicon(self, word_collection: Iterable[str]) -> None:
         """
@@ -384,7 +436,14 @@ class NYTWordleSimulator(WordleSimulator):
 
         :raise WordleError: Called during the middle of a game.
         """
-        raise NotImplementedError
+        if self._attempts_used > 0 and self.has_attempts_left():
+            raise WordleError(
+                "changing the lexicon contents in the middle of a game"
+            )
+        if self._lexicon is None:
+            self._lexicon = Lexicon()
+        for word in word_collection:
+            self._lexicon.add(word)
 
     def remove_lexicon(self, word_collection: Iterable[str]) -> None:
         """
@@ -399,7 +458,14 @@ class NYTWordleSimulator(WordleSimulator):
         :raise WordleError: Called during the middle of a game.
         :raise RuntimeError: :meth:`add_lexicon` was never called.
         """
-        raise NotImplementedError
+        if self._attempts_used > 0 and self.has_attempts_left():
+            raise WordleError(
+                "changing the lexicon contents in the middle of a game"
+            )
+        if self._lexicon is None:
+            raise RuntimeError("removing from a lexicon that does not exist")
+        for word in word_collection:
+            self._lexicon.remove(word)
 
     def clear_lexicon(self) -> None:
         """
@@ -410,8 +476,106 @@ class NYTWordleSimulator(WordleSimulator):
         :raise WordleError: Called during the middle of a game.
         :raise RuntimeError: :meth:`add_lexicon` was never called.
         """
-        raise NotImplementedError
+        if self._attempts_used > 0 and self.has_attempts_left():
+            raise WordleError(
+                "changing the lexicon contents in the middle of a game"
+            )
+        if self._lexicon is None:
+            raise RuntimeError("clearing a lexicon that does not exist")
+        self._lexicon = Lexicon()
 
     def guess_history(self) -> Iterator[TileString]:
         """Returns an iterator of all the guesses the player made."""
-        raise NotImplementedError
+        return iter(self._guess_history)
+
+    def is_unplayable(self,
+                      *args: Any,
+                      **kwargs: Any) -> WordleError | None:
+        """
+        If the simulator is unplayable in its current state.
+
+        A :class:`NoAttemptsError` is returned if the game was terminated; the
+        secret word has been guessed; or there are no more attempts left.
+
+        An :class:`InvalidGuessError` is returned if the guess is shorter or
+        longer than the secret word; the guess contains invalid characters; or
+        the guess is not a valid word.
+
+        Characters are valid if they are in the script this simulator is using.
+        If the script is empty, any character is valid. If no script exist, the
+        default script will be used.
+
+        Words are valid if they are in the lexicon this simulator is using. If
+        the lexicon is empty, any word is valid. If no lexicon exists, the
+        default lexicon will be used.
+
+        :raise TypeError: If the value of "guess" or the first argument is not a
+            string.
+        """
+        if error := super().is_unplayable():
+            return error
+
+        guess = kwargs.get("guess", args[0] if args else None)
+        if guess is None:
+            return None
+        if not isinstance(guess, str):
+            raise TypeError(
+                'value of "guess" must be a string, or the first argument must'
+                ' be a string'
+            )
+
+        length_diff = len(guess) - len(self._secret_word)
+        if length_diff != 0:
+            adjective = "short" if length_diff < 0 else "long"
+            return InvalidGuessError("Guess is too " + adjective)
+
+        script = self._script or Script.ENGLISH
+        for char in guess:
+            if len(script) == 0:
+                break
+            check_chars = {char}
+            if self._ignore_case:
+                check_chars.update(char.lower() + char.upper())
+            if not any(c in script for c in check_chars):
+                return InvalidGuessError("Guess contains invalid characters")
+
+        __lexicon = self._lexicon or lexicon
+        if len(__lexicon) == 0:
+            return
+        if not __lexicon.find(guess, ignore_case=self._ignore_case):
+            return InvalidGuessError("Guess is not a word")
+
+    def attempt_guess(self,
+                      guess: str,
+                      *args: Any,
+                      **kwargs: Any) -> TileString:
+        """
+        Attempts to guess the secret word.
+
+        The method generates a string of tiles after a guess, with each tile
+        representing a character. The tiles are color-coded to indicate its
+        accuracy in relation to the secret word. These hints should help the
+        player deduce the secret word.
+
+        ==========   ===================================================
+          Color      Description
+        ==========   ===================================================
+        ``GRAY``     The character is not in the word at all.
+        ``YELLOW``   The character is correct but in the wrong position.
+        ``GREEN``    The character and its position are both correct.
+        ==========   ===================================================
+
+        :param guess: The guess the player made.
+
+        :return: A string of tiles representing the accuracy of the guess.
+
+        :raise NoAttemptsError: The game was terminated; the player has
+            already guessed the secret word; or the player has no more attempts
+            left.
+        :raise InvalidGuessError: The guess is shorter or longer than the
+            secret word; the guess contains invalid characters; or the guess is
+            not in the lexicon.
+        """
+        tile_string = super().attempt_guess(guess, guess)
+        self._guess_history.append(tile_string)
+        return tile_string
