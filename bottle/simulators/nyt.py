@@ -33,6 +33,12 @@ class Script:
     pass
 
 
+class _TrieNode:
+    def __init__(self):
+        self.children: dict[str, _TrieNode] = {}
+        self.is_terminal = False
+
+
 class Lexicon:
     """
     A set of words implemented using a Trie data structure.
@@ -40,15 +46,19 @@ class Lexicon:
     This class provides efficient storage and retrieval of words, supporting
     operations such as adding, case-sensitive and case-insensitive search, and
     auto suggestions based on prefixes.
+
+    :ivar _root: The root of this Trie data structure.
+    :ivar _size: The number of words in the lexicon.
     """
 
     def __init__(self) -> None:
         """Initializes a lexicon using a Trie"""
-        raise NotImplementedError
+        self._root = _TrieNode()
+        self._size = 0
 
     def __len__(self) -> int:
         """The number of words in the lexicon."""
-        raise NotImplementedError
+        return self._size
 
     def add(self, word: str) -> None:
         """
@@ -60,7 +70,15 @@ class Lexicon:
 
         :param word: The word to add to the Trie.
         """
-        raise NotImplementedError
+        node = self._root
+        for char in word:
+            if char not in node.children:
+                node.children[char] = _TrieNode()
+            node = node.children[char]
+
+        if not node.is_terminal:
+            node.is_terminal = True
+            self._size += 1
 
     def find(self,
              word: str,
@@ -79,7 +97,71 @@ class Lexicon:
 
         :return: ``True`` if the word was found; ``False`` otherwise.
         """
-        raise NotImplementedError
+        if ignore_case:
+            return self.__find_ignoring_case(word)
+
+        node = self._root
+        for char in word:
+            if char not in node.children:
+                return False
+            node = node.children[char]
+        return node.is_terminal
+
+    def __find_ignoring_case(self, word: str) -> bool:
+        """
+        A helper method to search for a word in the Trie, ignoring case
+        sensitivity.
+
+        This method traverses the Trie to find all nodes with the ``word`` as
+        their value, ignoring case sensitivity. If any one of these nodes is an
+        end to a word, the method returns true.
+
+        :return: ``True`` if the word was found; ``False`` otherwise.
+        """
+        self.__find_nodes_ignoring_case(self._root, word, 0, nodes := [])
+        for n in nodes:
+            if n.is_terminal:
+                return True
+        return False
+
+    @staticmethod
+    def __find_nodes_ignoring_case(node: _TrieNode,
+                                   word: str,
+                                   depth: int,
+                                   nodes_found: list[_TrieNode]) -> None:
+        """
+        A helper method to find all the nodes that have the value ``word``,
+        ignoring case sensitivity.
+
+        This method traverses the Trie starting from the given node, usually
+        from the root, matching characters in the word at the current depth. It
+        checks for both lowercase and uppercase versions of each character. If
+        matching nodes are found, they are added to the list.
+
+        This function is used for :meth:`find` and :meth:`autosuggest`.
+
+        :param node: The current node being processed.
+        :param word: The word being searched for in the Trie.
+        :param depth: The current depth in the word, indicating the character
+            being processed.
+        :param nodes_found: A list to store nodes having the ``word`` as their
+            value.
+        """
+        if depth == len(word):
+            nodes_found.append(node)
+            return
+
+        upper = word[depth].upper()
+        lower = upper.lower()
+
+        if upper in node.children:
+            Lexicon.__find_nodes_ignoring_case(
+                node.children[upper], word, depth + 1, nodes_found
+            )
+        if lower in node.children:
+            Lexicon.__find_nodes_ignoring_case(
+                node.children[lower], word, depth + 1, nodes_found
+            )
 
     def remove(self, word: str) -> None:
         """
@@ -91,7 +173,46 @@ class Lexicon:
 
         :param word: The word to remove from the Trie.
         """
-        raise NotImplementedError
+        self.__remove(self._root, word, 0)
+
+    def __remove(self,
+                 node: _TrieNode,
+                 word: str,
+                 depth: int) -> bool:
+        """
+        A helper method to remove a word from the Trie.
+
+        This method traverses the Trie starting from the given node, usually
+        from the root, matching characters in the word at the current depth. If
+        a matching node is found, it is removed from the Trie. If there are
+        nodes that no longer belong to a word, they will be deleted.
+
+        :param node: The current node being processed.
+        :param word: The word to remove from the Trie.
+        :param depth: The current depth in the word, indicating the character
+            being processed.
+
+        :return: ``True`` if the current node can be safely deleted; ``False``
+            otherwise.
+        """
+        if not node:
+            return False
+
+        if depth == len(word):
+            if node.is_terminal:
+                node.is_terminal = False
+                self._size -= 1
+                return len(node.children) == 0
+            return False
+
+        if (char := word[depth]) not in node.children:
+            return False
+
+        remove_child = self.__remove(node.children[char], word, depth + 1)
+        if remove_child:
+            del node.children[char]
+            return len(node.children) == 0 and not node.is_terminal
+        return False
 
     def autosuggest(self,
                     prefix: str,
@@ -112,7 +233,70 @@ class Lexicon:
 
         :return: A set of words that start with the given prefix.
         """
-        raise NotImplementedError
+        if ignore_case:
+            return self.__auto_suggest_ignoring_case(prefix)
+
+        node = self._root
+        for char in prefix:
+            if char not in node.children:
+                return set()
+            node = node.children[char]
+
+        self.__auto_suggest(node, prefix, suggestions := set())
+        return suggestions
+
+    def __auto_suggest_ignoring_case(self, prefix: str) -> set[str]:
+        """
+        A helper method to search for words that begin with the given prefix,
+        ignoring case.
+
+        This method finds all nodes that have the ``prefix`` as their value,
+        regardless of case. It traverses through each found node for words,
+        which are added as suggestive words. A set of words is returned,
+        ensuring that duplicates are removed.
+
+        :param prefix: The prefix to search for in the Trie.
+
+        :return: A set of words that start with the given prefix, ignoring
+            case.
+        """
+        self.__find_nodes_ignoring_case(self._root, prefix, 0, nodes := [])
+        suggestions = set()
+        for n in nodes:
+            self.__auto_suggest(n, prefix, s := set(), ignore_case=True)
+            suggestions.update(s)
+        return suggestions
+
+    @staticmethod
+    def __auto_suggest(node: _TrieNode,
+                       prefix: str,
+                       suggestions: set[str],
+                       *,
+                       ignore_case: bool = False) -> None:
+        """
+        A helper method to search for words that begin with the given prefix.
+
+        This method traverses the Trie from the given node to find all words
+        that begin with the specified prefix. These words are collected and
+        returned as a set to ensure that duplicates are removed. Ignoring case
+        will further remove duplicate words.
+
+        :param node: The current node being processed.
+        :param prefix: The prefix to search for in the Trie.
+        :param suggestions: A set to store words that match the given prefix.
+        :param ignore_case: Whether to ignore case when searching for words.
+            Defaults to false.
+        :return:
+        """
+        if node.is_terminal:
+            suggestions.add(prefix)
+        for char, child in node.children.items():
+            if ignore_case:
+                char = char.lower()
+            Lexicon.__auto_suggest(
+                child, prefix + char, suggestions,
+                ignore_case=ignore_case
+            )
 
 
 class InvalidGuessError(WordleError):
