@@ -1,0 +1,115 @@
+@startuml
+left to right direction
+title BOTTLE
+
+
+!function $fg($c)
+!return "<color:" + $c + ">"
+!endfunction
+
+!function $type($s)
+!return $fg(RoyalBlue) + "<<" + $s + ">>" + $fg(Black)
+!endfunction
+
+!function $returns($s)
+!return $fg(MediumOrchid) + $s + $fg(Black)
+!endfunction
+
+
+package wordle
+{
+    enum Hint <<IntEnum>>
+    {
+        + BLACK = 0
+        + GRAY = 1
+        + YELLOW = 2
+        + GREEN = 3
+    }
+
+    class Tile
+    {
+        + char $type(str)
+        + hint $type(Hint)
+
+        + __init__(self, char $type(str), hint $type(Hint))
+    }
+
+    class TileString <<tuple>> {
+        A tuple of ""Tile""
+    }
+
+    class Wordle
+    {
+        # secret_word $type(str)
+        # max_attempts $type(int)
+        # attempts_used $type(int)
+        # has_guessed_word $type(bool)
+        # is_terminated $type(bool)
+        # ignore_case $type(bool)
+
+        + __init__(self, secret_word $type(str), max_attempts $type(int))
+
+        + has_attempts_left(self): $returns(int)
+        + has_guessed_word(self): $returns(bool)
+
+        + terminate(self, flag $type(bool))
+        + is_terminated(self): $returns(bool)
+
+        + reset(self, secret_word $type(Optional[str]), max_attempts $type(Optional[int]), *args $type(Any), **kwargs $type(Any))
+
+        + is_unplayable(self, *args $type(Any), **kwargs $type(Any)): $returns(Optional[WordleError])
+
+        + attempt_guess(self, guess $type(str), *args $type(Any), **kwargs $type(Any)): $returns(TileString)
+
+    }
+
+    Hint --* Tile::hint
+    Tile::__init__ --o TileString
+    TileString --o Wordle::attempt_guess
+
+
+    class WordleError <<Exception>>
+
+    WordleError --* Wordle::reset
+
+
+    class Lexicon
+    {
+        # root $type(TrieNode)
+        # size $type(int)
+
+        + __init__(self)
+        + __len__(self): $returns(int)
+
+        + add(self, word $type(str)
+        + find(self, word $type(str), *, ignore_case $type(bool)): $returns(bool)
+        + remove(self, word $type(str))
+
+        + autosuggest(self, prefix $type(str), *, ignore_case $type(bool)): $returns(set[str])
+    }
+
+    class NYTWordle <<Wordle>>
+    {
+        # script $type(set[str])
+        # lexicon $type(set[str])
+
+        # guess_history $type(list[TileString])
+
+        + __init__(self, secret_word $type(str), max_attempts $type(int))
+
+        + add_script(self, char_collection $type(Iterable[str]))
+        + remove_script(self, char_collection $type(Iterable[str]))
+        + clear_script(self)
+
+        + add_lexicon(self, word_collection $type(Iterable[str]))
+        + remove_lexicon(self, word_collection $type(Iterable[str]))
+        + clear_lexicon(self)
+
+        + guess_history(self): $returns(Iterator[TileString])
+    }
+
+    Lexicon --* NYTWordle::lexicon
+    NYTWordle --|> Wordle::__init__
+}
+
+@enduml
