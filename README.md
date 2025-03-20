@@ -4,10 +4,10 @@
 BOTTLE 2 is a collection of word-based puzzle games, bringing together classic challenges like *Wordle* and *Feudle* with additional variations such as *Duordle* and *Mathle*. The project aims to provide an engaging and interactive word game experience for Discord users while refining gameplay mechanics and improving the user interface.
 
 BOTTLE 2 was planned and developed using Agile Methodologies, ensuring an iterative and flexible development process. Key Agile principles applied include:
-- Incremental Development – Features were implemented in small, manageable iterations, allowing continuous improvements and refinements.
-- Frequent Testing – Each game mode was tested regularly.
-- Planning – Tasks were organized using Agile planning techniques, such as backlogs and sprints, to prioritize high-impact features.
-- Adaptability – The roadmap evolved based on challenges encountered, ensuring a responsive and dynamic approach to development.
+- **Incremental Development** – Features were implemented in small, manageable iterations, allowing continuous improvements and refinements.
+- **Frequent Testing** – Each game mode was tested regularly.
+- **Planning** – Tasks were organized using Agile planning techniques, such as backlogs and sprints, to prioritize high-impact features.
+- **Adaptability** – The roadmap evolved based on challenges encountered, ensuring a responsive and dynamic approach to development.
 
 By following Agile principles, BOTTLE 2 was able to grow efficiently, balancing feature additions and UI enhancements. 
 
